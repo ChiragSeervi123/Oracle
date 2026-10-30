@@ -122,7 +122,7 @@ tests/     command parser and world-machine tests
 
 - Not yet tested on real phones or in Safari. Touch was verified in Chrome's mobile emulation.
 - The JS bundle is about 1.5 MB (about 445 KB gzipped) in one chunk.
-- Command sounds were verified to play without errors, but not listened to on speakers.
+- Command sounds were designed for small speakers and checked by rendering them offline: each sits mainly in the 250 Hz–5 kHz range, all match in loudness, and no two share a spectral fingerprint. They have not yet been auditioned by ear on a range of devices.
 - In dev, the console shows a `THREE.Clock` deprecation warning from inside React Three Fiber.
 
 ---

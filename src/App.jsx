@@ -37,7 +37,7 @@ export default function App() {
     s.lock(true)
     const stopDirector = startDirector()
     const unbind = bindInput()
-    if (import.meta.env.DEV) window.__oracle = { state, scroller: s, speak }
+    if (import.meta.env.DEV) window.__oracle = { state, scroller: s, speak, audio }
     console.log(
       '%cORACLE%c\nYou looked behind the glass. It noticed.\nThe world obeys a few words. Press / and speak one. Some are hidden.',
       'font: italic 32px serif; color: #d9bb88',

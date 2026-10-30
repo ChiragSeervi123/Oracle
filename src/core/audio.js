@@ -9,6 +9,7 @@ class OracleAudio {
   lastUpdate = 0
   stages = new Map()
   out = null
+  duckUntil = 0
 
   build() {
     const Ctx = window.AudioContext || window.webkitAudioContext
@@ -33,6 +34,14 @@ class OracleAudio {
     bus.gain.value = 1
     bus.connect(master)
     bus.connect(verb)
+
+    // Command cues get a lighter reverb send than the ambience, so each stays distinct
+    // instead of dissolving into the same long wash.
+    this.cueBus = ctx.createGain()
+    this.cueBus.connect(master)
+    const cueSend = ctx.createGain()
+    cueSend.gain.value = 0.22
+    this.cueBus.connect(cueSend).connect(verb)
 
     // Drone
     const filter = (this.filter = ctx.createBiquadFilter())
@@ -155,7 +164,8 @@ class OracleAudio {
     const brightness = W ? W['audio.brightness'] : 1
     this.filter.frequency.setTargetAtTime((340 + h * h * 2600 + speed * 260 + s.negative * 500) * brightness, t, 0.15)
     this.shimmerGain.gain.setTargetAtTime(h * h * 0.07 + s.negative * 0.012 + (W ? W['audio.shimmer'] : 0) * 0.03, t, 0.12)
-    this.droneGain.gain.setTargetAtTime(W ? W['audio.level'] : 1, t, 0.25)
+    const duck = t < this.duckUntil ? 0.35 : 1 // the drone steps back while a cue speaks
+    this.droneGain.gain.setTargetAtTime((W ? W['audio.level'] : 1) * duck, t, 0.12)
     this.drone.forEach(({ osc, base }) => osc.frequency.setTargetAtTime(base * (1 + h * 0.059), t, 0.2))
     this.airGain.gain.setTargetAtTime(0.018 + speed * 0.03 + s.negative * 0.02, t, 0.2)
     this.airFilter.frequency.setTargetAtTime(900 + speed * 900 + s.negative * 1600, t, 0.2)
@@ -264,8 +274,10 @@ class OracleAudio {
     const off = status === 'deactivated' || status === 'expired'
     if (word === 'reset' || off) this.silence(word === 'reset' ? null : word)
     const stage = this.ctx.createGain()
-    stage.connect(this.bus)
+    stage.gain.value = LEVEL[word] ?? 1
+    stage.connect(this.cueBus ?? this.bus)
     this.stages.set(word, stage)
+    this.duckUntil = this.ctx.currentTime + (word === 'chaos' && !off ? 7 : 1.4)
     setTimeout(() => {
       stage.disconnect()
       if (this.stages.get(word) === stage) this.stages.delete(word)
@@ -285,73 +297,113 @@ class OracleAudio {
   }
 }
 
-// Every cue sits in the drone's A-minor pentatonic so they never clash with it.
+// Every cue has its own gesture in the 250 Hz–5 kHz range that laptop and phone speakers
+// can actually play; sub-bass is only extra weight for headphones. Pitched material
+// sits in the drone's A-minor pentatonic so nothing clashes with it.
 const CUES = {
+  // a shower of coins: bright bells climbing an arpeggio, then a warm shimmer
   gold() {
-    ;[220, 329.63, 440, 523.25, 659.25].forEach((f, i) => {
-      this.tone(f, { at: i * 0.045, peak: 0.07, decay: 3.4 })
-      this.tone(f * 2.76, { at: i * 0.045, peak: 0.018, decay: 1.2 })
+    ;[440, 523.25, 659.25, 880, 1046.5, 1318.5].forEach((f, i) => {
+      this.tone(f, { at: i * 0.07, peak: 0.16, decay: 1.6 })
+      this.tone(f * 2.76, { at: i * 0.07, peak: 0.04, decay: 0.5 })
+      this.tone(f * 5.4, { at: i * 0.07, peak: 0.015, decay: 0.2 })
     })
-    this.tone(1318.5, { at: 0.2, attack: 0.5, peak: 0.025, decay: 2.6 })
+    this.tone(659.25, { at: 0.45, attack: 0.3, peak: 0.05, decay: 2.2 })
+    this.tone(880, { at: 0.45, attack: 0.3, peak: 0.04, decay: 2.2 })
   },
+  // swallowed: the air is sucked in, then a bright tone dives through the whole range
   void() {
-    this.tone(92, { glide: 26, decay: 2.8, peak: 0.42 })
-    this.tone(55, { type: 'triangle', attack: 0.4, decay: 3.6, peak: 0.16 })
-    this.hiss({ type: 'lowpass', freq: 3200, to: 70, dur: 1.9, attack: 0.25, peak: 0.12 })
+    this.hiss({ freq: 500, to: 5000, attack: 0.42, dur: 0.05, q: 1.2, peak: 0.12 })
+    this.tone(1400, { type: 'triangle', at: 0.45, glide: 70, decay: 1.7, peak: 0.14 })
+    this.tone(700, { at: 0.45, glide: 35, decay: 1.9, peak: 0.1 })
+    this.tone(92, { at: 0.45, glide: 26, decay: 2.4, peak: 0.25 })
   },
+  // water: bright drops chirping upward, and a few deeper glugs
   liquid() {
-    for (let i = 0; i < 8; i++) {
-      const f = 280 + Math.random() * 420
-      this.tone(f, { at: i * 0.085 + Math.random() * 0.05, glide: f * 2.7, decay: 0.11, peak: 0.1 })
+    for (let i = 0; i < 11; i++) {
+      const f = 520 + Math.random() * 700
+      this.tone(f, { at: i * 0.075 + Math.random() * 0.04, glide: f * 3.2, attack: 0.002, decay: 0.07, peak: 0.24 })
     }
-    this.hiss({ freq: 600, to: 1900, dur: 1.4, attack: 0.2, peak: 0.035 })
+    for (let i = 0; i < 3; i++) this.tone(260 + i * 40, { at: 0.15 + i * 0.28, glide: 520, decay: 0.12, peak: 0.18 })
   },
+  // glass: struck crystal falling down a scale, with sparkles above it
   crystal() {
-    ;[880, 1046.5, 1174.66, 1318.51, 1567.98, 1760].forEach((f, i) => this.ping(f, { at: i * 0.07, decay: 2.2 - i * 0.15 }))
+    ;[1760, 1567.98, 1318.51, 1174.66, 1046.5, 880].forEach((f, i) => this.ping(f, { at: i * 0.09, peak: 0.12, decay: 1.6 }))
+    for (let i = 0; i < 8; i++) this.ping(2637 + Math.random() * 2000, { at: Math.random() * 0.9, peak: 0.03, decay: 0.5 })
   },
+  // the rules break: a sixteen-step glitch over a beat you can hear on any speaker
   chaos(off) {
     if (off) {
-      this.tone(329.63, { glide: 220, attack: 0.05, decay: 1.4, peak: 0.08 })
+      this.tone(659.25, { glide: 329.63, decay: 0.9, peak: 0.12 })
+      this.tone(440, { at: 0.2, decay: 1.4, peak: 0.1 })
       return
     }
-    const scale = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33]
-    for (let i = 0; i < 18; i++) {
-      const f = scale[Math.floor(Math.random() * scale.length)] * (Math.random() < 0.5 ? 1 : 2)
-      this.tone(f, { type: 'square', at: Math.random() * 0.9, decay: 0.05, peak: 0.035 })
+    const scale = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25, 783.99]
+    for (let i = 0; i < 16; i++) {
+      this.tone(scale[Math.floor(Math.random() * scale.length)], { type: 'square', at: i * 0.0625, decay: 0.045, peak: 0.06 })
     }
-    for (let k = 0; k < 14; k++) this.tone(72, { at: k * 0.5, glide: 38, decay: 0.26, peak: 0.32 })
+    for (let k = 0; k < 14; k++) {
+      this.tone(240, { at: k * 0.5, glide: 60, decay: 0.16, peak: 0.3 })
+      this.hiss({ at: k * 0.5 + 0.25, dur: 0.06, freq: 2200, q: 1.2, peak: 0.12 })
+    }
   },
+  // rewind and resolve: a tape spinning back, then home
   reset() {
-    this.hiss({ freq: 4200, to: 380, dur: 1.2, attack: 0.3, peak: 0.05 })
-    this.tone(440, { glide: 220, attack: 0.5, decay: 1.3, peak: 0.06 })
-    this.tone(220, { at: 1.05, peak: 0.08, decay: 2.6 })
-    this.tone(220 * 2.76, { at: 1.05, peak: 0.02, decay: 1 })
+    for (let i = 0; i < 5; i++) this.tone(2400 - i * 250, { type: 'triangle', at: i * 0.1, glide: 500, decay: 0.09, peak: 0.07 })
+    ;[220, 261.63, 329.63, 440].forEach((f, i) => this.tone(f, { at: 0.6 + i * 0.03, attack: 0.04, peak: 0.08, decay: 2.2 }))
   },
+  // time stops: a chord slows like a tape, and a clock ticks once
   still(off) {
-    ;[220, 329.63, 440].forEach((f) =>
+    ;[440, 659.25, 880].forEach((f) =>
       off
-        ? this.tone(f / 2, { glide: f, attack: 0.08, decay: 0.8, peak: 0.08 })
-        : this.tone(f, { glide: f / 2, decay: 0.85, peak: 0.09 }),
+        ? this.tone(f / 4, { type: 'triangle', glide: f, attack: 0.02, decay: 0.7, peak: 0.12 })
+        : this.tone(f, { type: 'triangle', glide: f / 4, decay: 0.8, peak: 0.12 }),
     )
+    this.hiss({ at: off ? 0 : 0.85, dur: 0.02, freq: 3200, q: 4, peak: 0.25 })
   },
+  // lift: a rising whistle and air rushing upward (falling when gravity returns)
   gravity(off) {
-    this.tone(off ? 880 : 110, { type: 'triangle', glide: off ? 110 : 880, attack: 0.3, decay: 1.6, peak: 0.07 })
-    this.hiss({ type: 'highpass', freq: off ? 5000 : 800, to: off ? 800 : 5000, dur: 1.5, attack: 0.3, peak: 0.04 })
+    const [a, b] = off ? [1760, 220] : [220, 1760]
+    this.tone(a, { type: 'triangle', glide: b, attack: 0.1, decay: 1.3, peak: 0.12 })
+    this.tone(a * 1.5, { glide: b * 1.5, attack: 0.1, decay: 1.3, peak: 0.05 })
+    this.hiss({ q: 2, freq: off ? 5000 : 900, to: off ? 900 : 5000, dur: 1.3, attack: 0.15, peak: 0.07 })
   },
+  // seen: a heartbeat with enough body to hear on a phone, then the eye opens
   watch(off) {
-    this.tone(62, { glide: 40, decay: 0.2, peak: 0.5 })
-    if (off) return
-    this.tone(62, { at: 0.24, glide: 40, decay: 0.2, peak: 0.38 })
-    this.hiss({ type: 'highpass', freq: 3000, at: 0.62, dur: 0.03, peak: 0.07 })
-  },
-  medusa() {
-    this.hiss({ type: 'lowpass', freq: 420, dur: 2.2, attack: 0.2, peak: 0.16 })
-    for (let i = 0; i < 30; i++) {
-      this.hiss({ freq: 300 + Math.random() * 600, q: 3, at: Math.random() * 1.6, dur: 0.02, peak: 0.08 })
+    const beat = (at, peak) => {
+      this.tone(200, { at, glide: 60, decay: 0.15, peak })
+      this.hiss({ at, dur: 0.035, freq: 650, q: 2.5, peak: peak * 0.7 })
     }
-    this.tone(55, { attack: 0.3, decay: 4, peak: 0.2 })
-    this.tone(82.41, { attack: 0.3, decay: 4, peak: 0.12 })
+    beat(0, 0.4)
+    if (off) return
+    beat(0.22, 0.3)
+    this.hiss({ at: 0.6, freq: 1200, to: 4200, dur: 0.5, attack: 0.25, q: 1.5, peak: 0.06 })
+    this.ping(1318.51, { at: 0.9, peak: 0.07, decay: 1.2 })
   },
+  // stone: grinding grit, an uneasy A against B♭, and a clack as it sets
+  medusa() {
+    this.hiss({ freq: 900, to: 320, q: 1.5, dur: 1.6, attack: 0.15, peak: 0.1 })
+    for (let i = 0; i < 40; i++) this.hiss({ freq: 700 + Math.random() * 1800, q: 4, at: Math.random() * 1.5, dur: 0.015, peak: 0.12 })
+    this.tone(220, { type: 'triangle', attack: 0.3, decay: 2.2, peak: 0.1 })
+    this.tone(233.08, { type: 'triangle', attack: 0.3, decay: 2.2, peak: 0.1 })
+    this.hiss({ at: 1.6, dur: 0.05, freq: 1500, q: 1, peak: 0.3 })
+    this.tone(110, { at: 1.6, glide: 60, decay: 0.3, peak: 0.25 })
+  },
+}
+
+// Per-cue gain so every word arrives at a similar loudness on small speakers. Measured by
+// rendering each cue offline, high-passing at 200 Hz and taking its loudest 200 ms.
+const LEVEL = {
+  gold: 0.44,
+  void: 0.69,
+  liquid: 1.21,
+  crystal: 0.63,
+  chaos: 1.56,
+  reset: 0.88,
+  still: 1,
+  gravity: 1.37,
+  watch: 1.46,
+  medusa: 1.22,
 }
 
 export const audio = new OracleAudio()
