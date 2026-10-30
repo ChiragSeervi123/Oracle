@@ -1,6 +1,6 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import { Color, Euler, Matrix4, OctahedronGeometry, Quaternion, Raycaster, Vector2, Vector3 } from 'three'
+import { Color, Euler, Matrix4, OctahedronGeometry, Quaternion, Raycaster, SRGBColorSpace, Vector2, Vector3 } from 'three'
 import { MULTITUDE_CENTER, RING_Z } from '../core/chapters.js'
 import { damp, mulberry32, smoothstep } from '../core/math.js'
 import { state } from '../core/state.js'
@@ -12,6 +12,7 @@ const RING_RADIUS = 3.4
 const CHROME = new Color(1, 1, 1)
 const SMOKE = new Color(0.34, 0.34, 0.36)
 const GOLD = new Color(1, 0.74, 0.4)
+const UPRIGHT = new Quaternion()
 
 const horizonVertex = /* glsl */ `
 varying vec3 vN;
@@ -38,9 +39,11 @@ export default function Multitude({ tier }) {
   const mesh = useRef()
   const root = useRef()
   const horizon = useRef()
+  const light = useRef()
   const camera = useThree((s) => s.camera)
 
   const geometry = useMemo(() => new OctahedronGeometry(1, 0), [])
+  const horizonUniforms = useMemo(() => ({ uColor: { value: new Color('#e8bf7e') } }), [])
 
   const shards = useMemo(() => {
     const rand = mulberry32(7)
@@ -66,6 +69,7 @@ export default function Multitude({ tier }) {
         axis,
         tumble: (rand() - 0.5) * 2.4,
         phase: rand() * TAU,
+        flee: new Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize(),
         color: tone < 0.06 ? GOLD : tone < 0.32 ? SMOKE : CHROME,
       })
     }
@@ -102,12 +106,25 @@ export default function Multitude({ tier }) {
     state.touched = 0
   }, [shards, count])
 
-  useFrame(({ clock }, dt) => {
+  useFrame((_, dt) => {
     const { c } = state
-    root.current.visible = c > 2.35
+    root.current.visible = c > 2.35 || state.warming
     if (!root.current.visible) return
-    const t = clock.elapsedTime * (state.reducedMotion ? 0.4 : 1)
+    const W = state.world
+    const t = state.phase.shards
     const { list, tilt, offsets, touched } = shards
+
+    const material = mesh.current.material
+    material.color.setRGB(...W['shards.tint'], SRGBColorSpace)
+    material.emissive.setRGB(...W['shards.glow'], SRGBColorSpace)
+    material.metalness = 1 - W['shards.matte'] * 0.97
+    material.roughness = 0.14 + W['shards.matte'] * 0.7
+
+    const scatter = W['shards.scatter']
+    const collapse = W['shards.collapse']
+    const wobble = W['shards.wobble']
+    const align = W['shards.align']
+    const lift = W['shards.rise']
 
     const interactive = state.pointerActive && c > 2.75 && c < 4.15
     if (interactive) {
@@ -122,13 +139,18 @@ export default function Multitude({ tier }) {
       const s = list[i]
       const form = smoothstep(3.35 + s.delay * 0.3, 3.72 + s.delay * 0.3, c)
 
-      // vortex position
-      const a = s.theta + t * s.omega
-      tmp.p.set(Math.cos(a) * s.r, s.h, Math.sin(a) * s.r).applyQuaternion(tilt).add(tmp.center)
+      // vortex position: VOID draws it in, CHAOS throws it out
+      const a = s.theta + t * s.omega * (1 + collapse * 1.5)
+      const r = s.r * (1 - collapse * 0.62) * (1 + scatter * 0.35)
+      tmp.p.set(Math.cos(a) * r, s.h * (1 - collapse * 0.8), Math.sin(a) * r).applyQuaternion(tilt).add(tmp.center)
       // ring position
       const phi = s.phi + ringSpin
       tmp.ring.set(Math.cos(phi) * s.ringR, 3 + Math.sin(phi) * s.ringR, RING_Z + s.ringZ)
       tmp.p.lerp(tmp.ring, form)
+
+      if (scatter > 0.001) tmp.p.addScaledVector(s.flee, scatter * (1.8 + Math.sin(t * 1.7 + i) * 0.8))
+      if (wobble > 0.001) tmp.p.y += Math.sin(t * 2 + s.r * 1.3 + s.phi * 3) * 0.35 * wobble
+      if (lift > 0.001) tmp.p.y += lift * (1.4 + Math.sin(t * 0.6 + i * 0.37) * 0.7)
 
       // flee from the pointer ray
       let tx = 0
@@ -164,19 +186,22 @@ export default function Multitude({ tier }) {
       tmp.p.y += offsets[o + 1]
       tmp.p.z += offsets[o + 2]
 
-      // tumbling crystal → aligned along the ring's tangent
-      tmp.q.setFromAxisAngle(s.axis, t * s.tumble + s.phase)
+      // tumbling crystal → aligned along the ring's tangent; CRYSTAL stands them upright
+      tmp.q.setFromAxisAngle(s.axis, t * s.tumble * (1 + scatter * 2) + s.phase)
       tmp.qRing.setFromAxisAngle(tmp.z, phi)
       tmp.q.slerp(tmp.qRing, form)
+      if (align > 0.001) tmp.q.slerp(UPRIGHT, align * (1 - form))
       tmp.s.set(s.size, s.size * s.stretch, s.size)
-      tmp.m.compose(tmp.p, tmp.q, tmp.s)
-      mesh.current.setMatrixAt(i, tmp.m)
+      mesh.current.setMatrixAt(i, tmp.m.compose(tmp.p, tmp.q, tmp.s))
     }
     mesh.current.instanceMatrix.needsUpdate = true
     if (colorsDirty) mesh.current.instanceColor.needsUpdate = true
 
-    const collapse = 1 - smoothstep(3.35, 3.85, c)
-    horizon.current.scale.setScalar(Math.max(collapse, 0.0001) * 0.62)
+    const collapseIn = 1 - smoothstep(3.35, 3.85, c)
+    horizon.current.scale.setScalar(Math.max(collapseIn, 0.0001) * 0.62 * W['portal.horizonScale'])
+    horizonUniforms.uColor.value.setRGB(...W['portal.horizon'], SRGBColorSpace)
+    light.current.color.setRGB(...W['portal.horizon'], SRGBColorSpace)
+    light.current.intensity = 45 * W['portal.light']
   })
 
   return (
@@ -186,9 +211,9 @@ export default function Multitude({ tier }) {
       </instancedMesh>
       <mesh ref={horizon} position={MULTITUDE_CENTER}>
         <sphereGeometry args={[1, 48, 48]} />
-        <shaderMaterial vertexShader={horizonVertex} fragmentShader={horizonFragment} uniforms={{ uColor: { value: new Color('#e8bf7e') } }} />
+        <shaderMaterial vertexShader={horizonVertex} fragmentShader={horizonFragment} uniforms={horizonUniforms} />
       </mesh>
-      <pointLight position={MULTITUDE_CENTER} color="#efc27e" intensity={45} distance={20} decay={2} />
+      <pointLight ref={light} position={MULTITUDE_CENTER} color="#efc27e" intensity={45} distance={20} decay={2} />
     </group>
   )
 }

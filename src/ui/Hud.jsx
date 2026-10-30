@@ -1,14 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { audio } from '../core/audio.js'
 import { CHAPTERS } from '../core/chapters.js'
-import { hud, on } from '../core/state.js'
+import { getCommand } from '../core/commands.js'
+import { emit, hud, on } from '../core/state.js'
+import { lexicon } from '../core/worldRuntime.js'
+
+// Which laws are currently in effect, as words: "Gold · Still".
+function describe(active) {
+  const words = [active.form, ...active.modifiers, ...active.temporary].filter(Boolean)
+  return words.map((w) => getCommand(w).title).join(' · ')
+}
 
 // Restrained instrument panel: brand, current chapter, sound, chapter index, live
-// camera coordinates and progress. Numeric read-outs are written by the director loop.
+// camera coordinates, progress, and the way to speak to the world.
+// Numeric read-outs are written by the director loop.
 export default function Hud({ scroller, entered }) {
   const [chapter, setChapter] = useState(0)
   const [sound, setSound] = useState(false)
-  const [toast, setToast] = useState('')
+  const [laws, setLaws] = useState('')
   const coords = useRef(null)
   const progress = useRef(null)
   const progressBar = useRef(null)
@@ -17,14 +26,7 @@ export default function Hud({ scroller, entered }) {
     hud.coords = coords.current
     hud.progress = progress.current
     hud.progressBar = progressBar.current
-    const offs = [
-      on('chapter', setChapter),
-      on('audio', setSound),
-      on('toast', (message) => {
-        setToast(message)
-        setTimeout(() => setToast(''), 4200)
-      }),
-    ]
+    const offs = [on('chapter', setChapter), on('audio', setSound), on('world', () => setLaws(describe(lexicon.active())))]
     return () => offs.forEach((off) => off())
   }, [])
 
@@ -72,6 +74,14 @@ export default function Hud({ scroller, entered }) {
         <span className="hud__coords" ref={coords}>
           X 0.00 Y 0.00 Z 0.00
         </span>
+        <span className="hud__voice">
+          <button className="hud__speak" onClick={() => emit('command:open')} aria-label="Speak a word to the world">
+            <span className="hud__speak-glyph" aria-hidden="true" />
+            Speak
+            <kbd className="only-fine">/</kbd>
+          </button>
+          {laws && <span className="hud__laws">{laws}</span>}
+        </span>
         <span className="hud__progress">
           <i>
             <b ref={progressBar} />
@@ -79,10 +89,6 @@ export default function Hud({ scroller, entered }) {
           <span ref={progress}>000</span>%
         </span>
       </footer>
-
-      <p className={`toast${toast ? ' is-visible' : ''}`} role="status">
-        {toast}
-      </p>
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import { HOLD_LIMIT } from './chapters.js'
+import { WHISPER_LIMIT, matchWhisper } from './commands.js'
 import { emit, state } from './state.js'
+import { speak } from './worldRuntime.js'
 
 export const canHold = () => state.entered && state.c < HOLD_LIMIT
 
@@ -16,23 +18,35 @@ export function endHold() {
   state.locked = false
 }
 
-const isInterface = (target) => target instanceof Element && target.closest('a, button, input, [data-ui]')
+const isInterface = (target) =>
+  target instanceof Element && target.closest('a, button, input, textarea, select, [contenteditable], [data-ui]')
+const isTextField = (target) => target instanceof Element && target.closest('input, textarea, select, [contenteditable]')
 
-let goldTimer
+// Words typed anywhere are whispered to the world; a known word takes effect the
+// moment its last letter lands. Enter submits whatever was typed so far.
+let whisper = ''
+let idleTimer
 
-function transmute() {
-  state.goldTarget = 1
-  emit('toast', 'Au · 79 — transmutation')
-  clearTimeout(goldTimer)
-  goldTimer = setTimeout(() => {
-    state.goldTarget = 0
-  }, 14000)
+function setWhisper(text, status) {
+  whisper = status === 'typing' ? text : ''
+  emit('whisper', { text, status })
+}
+
+function clearWhisper() {
+  clearTimeout(idleTimer)
+  if (whisper) setWhisper('', 'clear')
+}
+
+function submitWhisper() {
+  clearTimeout(idleTimer)
+  const text = whisper
+  const result = speak(text, { source: 'whisper' })
+  setWhisper(text, result.ok ? 'matched' : 'unknown')
 }
 
 export function bindInput() {
   let lastX = 0
   let lastY = 0
-  let typed = ''
 
   const move = (e) => {
     state.pointer.x = (e.clientX / window.innerWidth) * 2 - 1
@@ -57,14 +71,41 @@ export function bindInput() {
   }
 
   const keydown = (e) => {
-    if (e.code === 'Space' && canHold() && !isInterface(e.target)) {
-      e.preventDefault() // in the first chapters Space consults the oracle instead of paging
-      if (!e.repeat) beginHold()
+    if (e.ctrlKey || e.metaKey || e.altKey) return // never hijack browser shortcuts
+    if (isTextField(e.target)) return // a real text field (including the command bar) owns its keys
+
+    if (e.code === 'Space') {
+      clearWhisper()
+      if (canHold() && !isInterface(e.target)) {
+        e.preventDefault() // in the first chapters Space consults the oracle instead of paging
+        if (!e.repeat) beginHold()
+      }
       return
     }
-    if (e.key.length === 1) {
-      typed = (typed + e.key.toLowerCase()).slice(-4)
-      if (typed === 'gold') transmute()
+    if (!state.entered) return
+
+    if (e.key === '/') {
+      e.preventDefault()
+      clearWhisper()
+      emit('command:open')
+    } else if (e.key === 'Escape') {
+      clearWhisper()
+    } else if (e.key === 'Enter' && whisper && !isInterface(e.target)) {
+      e.preventDefault()
+      submitWhisper()
+    } else if (e.key === 'Backspace' && whisper) {
+      setWhisper(whisper.slice(0, -1), 'typing')
+    } else if (/^[a-z]$/i.test(e.key)) {
+      const text = (whisper + e.key.toLowerCase()).slice(-(WHISPER_LIMIT + 4))
+      const command = matchWhisper(text)
+      clearTimeout(idleTimer)
+      if (command) {
+        speak(command.word, { source: 'whisper' })
+        setWhisper(text, 'matched')
+        return
+      }
+      setWhisper(text, 'typing')
+      idleTimer = setTimeout(() => setWhisper(text, text.length >= 3 ? 'unknown' : 'clear'), 1800)
     }
   }
 
@@ -91,7 +132,7 @@ export function bindInput() {
   document.documentElement.addEventListener('pointerleave', leave)
 
   return () => {
-    clearTimeout(goldTimer)
+    clearTimeout(idleTimer)
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerdown', down)
     window.removeEventListener('pointerup', up)

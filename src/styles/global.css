@@ -7,6 +7,7 @@
   --gold: #dcbd8a;
   --line: rgba(236, 230, 218, 0.18);
   --scrim: rgba(5, 5, 5, 0.82);
+  --panel: rgba(9, 9, 10, 0.72);
 
   --serif: 'Instrument Serif', 'Iowan Old Style', 'Times New Roman', serif;
   --sans: 'Geist', 'Helvetica Neue', system-ui, sans-serif;
@@ -27,6 +28,7 @@ html.is-negative {
   --gold: #6e4f1f;
   --line: rgba(14, 13, 11, 0.22);
   --scrim: rgba(238, 233, 224, 0.85);
+  --panel: rgba(240, 235, 226, 0.8);
 }
 
 *,
@@ -786,24 +788,339 @@ html.is-negative .btn--ink:focus-visible {
   transform: scaleX(0);
 }
 
-.toast {
+/* Speak: the way into the world's rules */
+.hud__voice {
   position: absolute;
   left: 50%;
-  top: calc(var(--gutter) + 30px);
-  transform: translate(-50%, 10px);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  opacity: 0;
-  transition:
-    opacity 0.8s var(--ease),
-    transform 0.8s var(--ease);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  white-space: nowrap;
 }
 
-.toast.is-visible {
+.hud__speak {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  opacity: 0.75;
+  transition: opacity 0.4s var(--ease);
+}
+
+.hud__speak:hover,
+.hud__speak:focus-visible {
+  opacity: 1;
+}
+
+.hud__speak-glyph {
+  width: 9px;
+  height: 9px;
+  border: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.hud__speak kbd {
+  font: inherit;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.5;
+}
+
+.hud__laws {
+  opacity: 0.55;
+}
+
+.hud__laws::before {
+  content: '◆';
+  margin-right: 10px;
+  font-size: 8px;
+  vertical-align: 1px;
+}
+
+/* Typed words, whispered faintly along the bottom of the world */
+.whisper {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--gutter) + 46px);
+  transform: translate(-50%, 6px);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: #ece6da;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.5s var(--ease),
+    transform 0.5s var(--ease);
+}
+
+.whisper.is-visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+.whisper__text {
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+}
+
+.whisper.is-typing .whisper__text::after {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: -0.3em;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: blink 1s steps(2) infinite;
+}
+
+.whisper__note {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+
+.whisper.is-matched .whisper__text {
+  letter-spacing: 0.9em;
+  filter: blur(2px);
+  opacity: 0;
+  transition:
+    letter-spacing 1.2s var(--ease),
+    filter 1.2s var(--ease),
+    opacity 1.2s var(--ease);
+}
+
+.whisper.is-matched .whisper__note {
+  opacity: 0;
+}
+
+.whisper.is-unknown .whisper__text {
+  opacity: 0.4;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* A spoken word passes across the world like a title card */
+.proclaim {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: var(--ink);
+  text-shadow: 0 0 28px var(--scrim), 0 0 2px var(--scrim);
+}
+
+.proclaim__inner {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 0 var(--gutter);
+}
+
+.proclaim__title {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(3.4rem, 11vw, 10rem);
+  line-height: 0.9;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-right: -0.18em;
+}
+
+.proclaim__inner.is-small .proclaim__title {
+  font-size: clamp(2rem, 5vw, 4rem);
+}
+
+.proclaim__inner.is-off .proclaim__title {
+  opacity: 0.55;
+}
+
+.proclaim__line {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  max-width: 44ch;
+  line-height: 1.7;
+}
+
+.proclaim__note {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.05rem;
+  opacity: 0.7;
+}
+
+/* The command bar */
+.speak {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--gutter) + 52px);
+  z-index: 45;
+  width: min(560px, calc(100vw - 2 * var(--gutter)));
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--ink);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.7);
+  transform: translate(-50%, 14px);
+  opacity: 0;
+  visibility: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+  transition:
+    opacity 0.45s var(--ease),
+    transform 0.45s var(--ease),
+    visibility 0s linear 0.45s;
+}
+
+.speak.is-open {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.45s var(--ease),
+    transform 0.45s var(--ease);
+}
+
+.speak__field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.speak__glyph {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--gold);
+  transform: rotate(45deg);
+}
+
+.speak__field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.7rem;
+  line-height: 1.2;
+  caret-color: var(--gold);
+}
+
+.speak__field input::placeholder {
+  color: var(--ink-faint);
+}
+
+.speak__go {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  transition:
+    color 0.3s,
+    border-color 0.3s;
+}
+
+.speak__go:hover,
+.speak__go:focus-visible {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.speak__words {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.speak__words button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  transition:
+    color 0.3s,
+    border-color 0.3s,
+    background 0.3s;
+}
+
+.speak__words button:hover,
+.speak__words button:focus-visible {
+  color: var(--ink);
+  border-color: var(--ink-dim);
+}
+
+.speak__words button.is-active {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.speak__feedback {
+  min-height: 1.3em;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.speak__feedback:empty {
+  display: none;
+}
+
+.speak__feedback button {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.speak__feedback em {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.speak__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
 /* ───────────────────────── Loader ───────────────────────── */
@@ -1131,6 +1448,35 @@ html.has-cursor * {
 
   .hud__progress i {
     width: 64px;
+  }
+
+  .hud__voice {
+    position: static;
+    transform: none;
+  }
+
+  .hud__laws {
+    max-width: 34vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .speak {
+    top: calc(var(--gutter) + var(--hud-h));
+    bottom: auto;
+    transform: translate(-50%, -14px);
+  }
+
+  .speak.is-open {
+    transform: translate(-50%, 0);
+  }
+
+  .speak__field input {
+    font-size: 1.4rem;
+  }
+
+  .proclaim__title {
+    font-size: clamp(2.4rem, 12vw, 4.4rem);
   }
 }
 

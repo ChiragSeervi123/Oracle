@@ -1,9 +1,20 @@
 import gsap from 'gsap'
 import { audio } from './audio.js'
-import { CHAPTERS, HOLD_LIMIT, HOLD_SECONDS, chapterAt } from './chapters.js'
+import { CHAPTERS, FINALE_Z, HOLD_LIMIT, HOLD_SECONDS, MULTITUDE_CENTER, ORACLE_Y, chapterAt } from './chapters.js'
 import { damp, smoothstep } from './math.js'
 import { createProphecy } from './prophecy.js'
 import { emit, hud, state } from './state.js'
+import { now, ripple, tickWorld } from './worldRuntime.js'
+
+const READING_GOLD = [0.95, 0.79, 0.54]
+
+// Where the world's attention is: commands ripple out from here.
+function updateFocus(c) {
+  const f = state.focus
+  if (c < 2.4) f.splice(0, 3, 0, ORACLE_Y, 0)
+  else if (c < 4.15) f.splice(0, 3, ...MULTITUDE_CENTER)
+  else f.splice(0, 3, 0, ORACLE_Y, FINALE_Z)
+}
 
 // The non-WebGL half of the frame loop: scroll damping, the hold mechanic,
 // chapter activation, HUD read-outs and audio. Runs on GSAP's ticker.
@@ -24,6 +35,8 @@ export function startDirector() {
     const prev = state.c
     state.c = damp(state.c, state.targetC, state.reducedMotion ? 14 : 3.6, dt)
     state.velocity = damp(state.velocity, (state.c - prev) / Math.max(dt, 1e-4), 5, dt)
+    updateFocus(state.c)
+    tickWorld(now(), dt)
 
     // The reading
     if (state.c > HOLD_LIMIT && state.holding) {
@@ -39,6 +52,7 @@ export function startDirector() {
         const prophecy = createProphecy({ heldFor: state.heldFor, entropy: state.entropy })
         emit('reading', prophecy)
         audio.chime()
+        ripple(0, 0, READING_GOLD, 1.4)
       }
     } else {
       // Let go too early and it forgets you; after a reading it exhales slowly.
@@ -46,7 +60,6 @@ export function startDirector() {
     }
     state.release += dt
 
-    state.gold = damp(state.gold, state.goldTarget, 1.6, dt)
     state.negative = smoothstep(4.17, 4.42, state.c)
 
     if (Math.abs(state.hold - lastHold) > 0.001) {

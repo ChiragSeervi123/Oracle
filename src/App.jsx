@@ -6,12 +6,16 @@ import { startDirector } from './core/director.js'
 import { bindInput } from './core/input.js'
 import { createScroller } from './core/scroll.js'
 import { state } from './core/state.js'
+import { speak } from './core/worldRuntime.js'
 import Stage from './scene/Stage.jsx'
 import Chapters from './ui/Chapters.jsx'
+import CommandBar from './ui/CommandBar.jsx'
 import Cursor from './ui/Cursor.jsx'
 import Fallback from './ui/Fallback.jsx'
 import Hud from './ui/Hud.jsx'
 import Loader from './ui/Loader.jsx'
+import Proclamation from './ui/Proclamation.jsx'
+import Whisper from './ui/Whisper.jsx'
 
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
 
@@ -33,9 +37,9 @@ export default function App() {
     s.lock(true)
     const stopDirector = startDirector()
     const unbind = bindInput()
-    if (import.meta.env.DEV) window.__oracle = { state, scroller: s }
+    if (import.meta.env.DEV) window.__oracle = { state, scroller: s, speak }
     console.log(
-      '%cORACLE%c\nYou looked behind the glass. It noticed.\nTry typing “gold”.',
+      '%cORACLE%c\nYou looked behind the glass. It noticed.\nThe world obeys a few words. Press / and speak one. Some are hidden.',
       'font: italic 32px serif; color: #d9bb88',
       'font: 12px monospace; color: #8a8378',
     )
@@ -64,9 +68,12 @@ export default function App() {
       <div className="viewport">
         <Stage tier={tier} onReady={handleReady} />
         <Chapters scroller={scroller} tier={tier} />
+        <Proclamation />
+        <Whisper />
         <Hud scroller={scroller} entered={entered} />
       </div>
       <div ref={track} className="track" aria-hidden="true" />
+      <CommandBar />
       <Cursor />
       <Loader ready={ready} onEnter={enter} />
     </>
