@@ -31,8 +31,10 @@ export default function CommandBar() {
 
   useEffect(() => {
     const offs = [
-      on('command:open', () => {
-        returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      on('command:open', (options) => {
+        // keyboard users get their focus back when the bar closes; a tap or click does not need it
+        const from = document.activeElement
+        returnFocus.current = !options?.pointer && from instanceof HTMLElement ? from : null
         setOpen(true)
       }),
       on('world', () => refresh((n) => n + 1)),

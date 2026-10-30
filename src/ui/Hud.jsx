@@ -75,7 +75,11 @@ export default function Hud({ scroller, entered }) {
           X 0.00 Y 0.00 Z 0.00
         </span>
         <span className="hud__voice">
-          <button className="hud__speak" onClick={() => emit('command:open')} aria-label="Speak a word to the world">
+          <button
+            className="hud__speak"
+            onClick={(e) => emit('command:open', { pointer: e.detail > 0 })}
+            aria-label="Speak a word to the world"
+          >
             <span className="hud__speak-glyph" aria-hidden="true" />
             Speak
             <kbd className="only-fine">/</kbd>

@@ -101,8 +101,8 @@ export function tickWorld(t, dt) {
   P.env += step * W['atmosphere.envSpin'] * (calm ? 0.3 : 1)
   // Once nothing is spinning the light or the dust, they settle back to where they
   // started, so RESET really does restore the original lighting and particles.
-  const settle = 1 - Math.exp(-0.8 * dt)
-  if (W['atmosphere.envSpin'] < 0.01) P.env += (Math.round(P.env / (Math.PI * 2)) * Math.PI * 2 - P.env) * settle
+  const settle = 1 - Math.exp(-1.5 * dt)
+  if (W['atmosphere.envSpin'] < 0.02) P.env += (Math.round(P.env / (Math.PI * 2)) * Math.PI * 2 - P.env) * settle
   if (W['dust.swirl'] < 0.01) P.swirl -= P.swirl * settle
   P.waves += step * (calm ? 0.5 : 1)
   P.beat += dt * 2 // CHAOS lights pulse at 120 bpm, in real time
